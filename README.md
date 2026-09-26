@@ -43,8 +43,8 @@ This is deliberately not all of RapidFuzz. Damerau-Levenshtein, Hamming, Indel
 as a standalone distance module, Jaro/Jaro-Winkler, LCSseq, OSA, Prefix,
 Postfix, cached scorer classes, and the C-API capsules are not implemented.
 `workers` is accepted by `cdist` and `cpdist` for signature compatibility but
-does not control execution. ASCII ratio matrices may use CPU parallelism
-automatically. Edit scripts are always minimal and produce the same transformed
+does not control execution. ASCII ratio matrices run single-threaded. Edit
+scripts are always minimal and produce the same transformed
 value; when several minimal scripts exist, their tie selection can differ from
 RapidFuzz's bit-parallel traceback.
 
@@ -105,8 +105,9 @@ Unit-cost ASCII Levenshtein and Indel/LCS scoring use multiword bitsets. SIMD
 handles complete vectors and a scalar tail handles the remainder. Weighted and
 general-sequence scoring uses a one-row dynamic program with common-prefix and
 suffix trimming. Batch operations flatten each collection once, reuse query
-masks, and can parallelize large matrices or explicitly request the optional
-GPU kernel.
+masks, and can explicitly request the optional GPU kernel. Matrix scoring is
+memory- and latency-bound on a serial bit-parallel dependency chain, so it is
+not chunked across threads.
 
 ## License
 

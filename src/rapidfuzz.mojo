@@ -1,9 +1,8 @@
 """Levenshtein and Indel kernels used by the Python bindings."""
 
-from std.algorithm import parallelize
 from std.bit import pop_count
-from std.gpu import global_idx
-from std.gpu.host import DeviceContext
+from max.gpu import global_idx
+from max.gpu.host import DeviceContext
 from std.sys.info import simd_width_of
 
 comptime U8Ptr = UnsafePointer[UInt8, AnyOrigin[mut=True]]
@@ -770,21 +769,19 @@ def mrf_ratio_matrix_ascii(
                 / Float64(total)
             )
 
-    if query_count * choice_count >= 262_144:
-        parallelize[score_row](query_count, 8)
-    else:
-        for row in range(query_count):
-            score_row(row)
+    for row in range(query_count):
+        score_row(row)
 
 
 def prepare_ascii_masks_gpu(
     queries: U8Ptr,
     query_offsets: I64Ptr,
-    query_count: Int,
+    query_count: Int64,
     masks: U64Ptr,
 ):
-    var row = global_idx.x
-    if row >= query_count:
+    # Device-passable scalars must be fixed-width; 1.2.0 rejects `Int` here.
+    var row = Int(global_idx.x)
+    if row >= Int(query_count):
         return
     var row_masks = masks + row * 256
     for i in range(256):
@@ -798,19 +795,22 @@ def prepare_ascii_masks_gpu(
 def ratio_matrix_ascii_gpu_kernel(
     queries: U8Ptr,
     query_offsets: I64Ptr,
-    query_count: Int,
+    query_count: Int64,
     choices: U8Ptr,
     choice_offsets: I64Ptr,
-    choice_count: Int,
+    choice_count: Int64,
     scores: F64Ptr,
     masks: U64Ptr,
 ):
-    var index = global_idx.x
-    var size = query_count * choice_count
+    # Device-passable scalars must be fixed-width; 1.2.0 rejects `Int` here.
+    var index = Int(global_idx.x)
+    var queries_total = Int(query_count)
+    var choices_total = Int(choice_count)
+    var size = queries_total * choices_total
     if index >= size:
         return
-    var row = index // choice_count
-    var column = index - row * choice_count
+    var row = index // choices_total
+    var column = index - row * choices_total
     var query_len = (
         Int(query_offsets[row + 1]) - Int(query_offsets[row])
     )
@@ -875,7 +875,7 @@ def mrf_ratio_matrix_ascii_gpu(
         ctx.enqueue_function[prepare_ascii_masks_gpu](
             queries_device,
             query_offsets_device,
-            query_count,
+            Int64(query_count),
             masks_device,
             grid_dim=(query_count + BLOCK_SIZE - 1) // BLOCK_SIZE,
             block_dim=BLOCK_SIZE,
@@ -884,10 +884,10 @@ def mrf_ratio_matrix_ascii_gpu(
         ctx.enqueue_function[ratio_matrix_ascii_gpu_kernel](
             queries_device,
             query_offsets_device,
-            query_count,
+            Int64(query_count),
             choices_device,
             choice_offsets_device,
-            choice_count,
+            Int64(choice_count),
             scores_device,
             masks_device,
             grid_dim=(size + BLOCK_SIZE - 1) // BLOCK_SIZE,
