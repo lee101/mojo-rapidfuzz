@@ -46,7 +46,7 @@ def popcount_words(pointer: U64Ptr, count: Int) -> Int:
     var total = 0
     var i = 0
     while i + W <= count:
-        total += Int(pop_count(pointer.load[width=W](i)).reduce_add())
+        total += Int(pop_count(pointer.unsafe_load[width=W](i)).reduce_add())
         i += W
     while i < count:
         total += popcount(pointer[i])
